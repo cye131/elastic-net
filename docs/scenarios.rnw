@@ -1,0 +1,439 @@
+\documentclass[10pt]{article}
+
+\usepackage[left=.5in,right=.5in,top=1in, bottom=1in,headheight=48pt]{geometry}
+\usepackage{fancyhdr,lastpage,titlesec,tabularx,float,graphicx}
+\usepackage[hypertexnames=false]{hyperref}
+\usepackage{pdflscape} % landscape
+\usepackage[table]{xcolor} % Get colors
+\usepackage{makeidx}
+\usepackage{etoolbox}
+\usepackage{amsmath}
+\usepackage{rotating} %sidewaystable
+\usepackage{colortbl} % rowcolor tables
+\usepackage{multicol} % Multiple columns
+\usepackage{sectsty} % Section colors https://tex.stackexchange.com/questions/75667/change-colour-on-chapter-section-headings-lyx
+\usepackage{booktabs} % for different hlines in tables
+\usepackage{enumitem} % Used for references to make hanging indented lsits
+%\usepackage[dvipsnames]{xcolor} % Table rowcolor
+%\usepackage[dvipsnames]{xcolor} % Get colors
+\usepackage{listings} % For typing code
+\setcounter{secnumdepth}{0} % No numbering on subsubsections or lower
+\newcommand{\var}[1]{\mathit{\detokenize{#1}}} % Add command \var to format variable names
+\renewcommand{\familydefault}{\sfdefault} % Everything sans serif
+\sectionfont{\color{red}}
+\newbool{@final}
+\setbool{@final}{true}
+\ifbool{@final}{
+}{
+	\usepackage{draftwatermark}
+	\SetWatermarkText{DRAFT}
+	\SetWatermarkScale{5}
+}
+\pagestyle{fancy}
+\rhead{\includegraphics[height=11pt]{R:/latex-content/images/syn-logo}}
+%\fancyhead[L]{\rightmark} 
+\fancyfoot[L] {Macroeconomic Scenarios}
+%\fancyfoot[L] {\jobname}
+\fancyfoot[R] {Internal Use Only $\vert $\hspace{2 px}\thepage}
+\makeindex
+
+\begin{document}
+
+<<load, echo = FALSE, message = FALSE, warning = FALSE>>=
+  library(tidyverse)
+  library(data.table)
+  library(xtable)
+  fn = new.env()
+  fns = list.files(path = file.path('D:/Ye/chimps/R/functions'), pattern = '[.]R$', full.name = TRUE, recursive = TRUE)
+  for (file in fns) {
+    source(file, local = TRUE)
+  }
+
+  # help("print.xtable")
+  options(xtable.table.placement = 'H')
+  options(xtable.include.rownames = FALSE)
+  
+  # Global knitr options
+  knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+  # output = readRDS('D:/Ye/chimps-models/v6.2-20190903-U-September 2019 Model/p5/output.rds')
+  # saveRDS(list(d = output$d), file.path(dirname(rstudioapi::getSourceEditorContext()$path), 'output.rds'))
+  
+  rds = readRDS('D:/Ye/chimps/documentation/scenarios_files/output.rds')
+  sc = readRDS('D:/Ye/chimps-sims/v6.2-20190903-U-September 2019 Model/scenarios-final-2/scMin.rds')
+  scTexts = readRDS('D:/Ye/chimps/documentation/scenarios_files/scDescs.rds')
+
+  rds$d$params$ted_spread$name = 'TED Spread'
+  rds$d$params$sp500$output2Units = 'QoQ%'
+  rds$d$params$bank_bal_sheet_ll$name = 'Outstanding Bank Loans'
+
+  sc$predFlat =
+    sc$predFlat %>%
+    data.table::dcast(., scenario + form + date ~ varname, value.var = 'value') %>%
+    .[, sp500 := ifelse(form == 'output2', sp500 - 2/4, sp500)] %>%
+    melt(., id.vars = c('scenario', 'form', 'date'), variable.name = 'varname')     
+  
+  chooseScenarios = list('baseline_snv', 'baseline', 'p075', 'p025', 'p005', 'recession_severe_8q')
+  sc$scenarios$p005$longName = 'Long-Term Slump'
+  sc$scenarios$baseline_snv$longName = 'Recommended'
+  sc$scenarios$recession_minor_8q$longName = 'Minor Recession'
+  sc$scenarios$recession_severe_8q$longName = 'Severe Recession'
+@
+
+
+\pagenumbering{roman}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}%
+
+
+\definecolor{titlepagecolor}{RGB}{255, 0, 0}
+\begin{titlepage}
+\newgeometry{left=7.5cm} %defines the geometry for the titlepage
+\pagecolor{titlepagecolor}
+\noindent
+\includegraphics[height=1.0cm]{R:/latex-content/images/syn-logo-transparent-2.png}\\[-1em]
+% \includegraphics[width=2cm]{logo.jpg}\\[-1em]
+\color{white}
+\makebox[0pt][l]{\rule{1.3\textwidth}{1pt}}
+\par
+\noindent
+\textbf{\textsf{Internal Use Only}}
+\vfill
+\noindent
+{\huge \textsf{Macroeconomic Scenarios \& Forecasts}}
+\vskip\baselineskip
+\noindent
+\textsf{September 2019}
+\end{titlepage}
+\restoregeometry % restores the geometry
+\nopagecolor% Use this to restore the color pages to white
+
+% \begin{titlepage}
+%   \begin{center}
+%     \newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+%     \HRule \\[0.4cm]
+%     %%%%%%%%%%%%%%        TITLE          %%%%%%%%%%%%%%%%%%%%%
+%     {\LARGE \bfseries Synovus Macroeconomic Scenarios \\[0.4cm] }
+%     %%%%%%%%%%%%%%%%%%                   %%%%%%%%%%%%%%%%%%%
+%     \HRule \\[.25in]
+%     \LARGE September 2019 \\
+%     %\LARGE version 6.0
+%     %\Sexpr{format(Sys.Date(), format = '%B %d, %Y')} \\ 
+% 
+%     \vspace*{1in}
+%     % Author
+%     % \large Model Developers:\normalsize
+%     % \begin{table}[H]
+%     %   \centering
+%     %   \begin{tabularx}{\textwidth}{R |X}
+%     %     Charles Ye & \small\emph{charlesye@synovus.com}\\
+%     %   \end{tabularx}
+%     % \end{table}
+% 
+%     \normalsize
+%     \vspace*{-7pt}
+% 
+%   \end{center}
+%   
+%   \vspace{1.8in}
+%   
+%   % Synovus logo
+%   \begin{figure}[b]
+%     \centering
+%     %\includegraphics[height=.375in]{``../img/syn-logo``}
+%   \end{figure}
+% 
+% \end{titlepage}
+
+\pagestyle{fancy}
+\setcounter{page}{2}
+\tableofcontents
+\cleardoublepage
+
+%\printindex
+\let\originalstyle=\thispagestyle % Store the command for later reuse.
+\def\thispagestyle#1{} % This line completely ignores the content of the \thispagestyle command.
+\printindex % Typeset the actual Index.
+\let\thispagestyle=\originalstyle % Let's get back to the original version of the \thispagestyle, if needed later in the document.
+% From u/Malipivo http://tex.stackexchange.com/questions/104516/no-page-number-on-the-first-page-of-an-index-not-toc
+
+\renewcommand{\arraystretch}{1.75}
+\setlength{\parskip}{.75\baselineskip}
+\setlength{\parindent}{0pt}
+\pagenumbering{arabic}
+% \begin{multicols}{2}
+
+
+%\begin{landscape}
+
+\definecolor{darkRed}{RGB}{139, 0, 0}
+\definecolor{lightRed}{RGB}{255, 240, 240}
+\definecolor{lightGray}{RGB}{240, 240, 240}
+
+<<scenarios, results = 'asis'>>=
+prettyFormat =
+  list(
+    list('output2', 'gdp', 'Gross Domestic Product (SAAR%)', 'Output'),
+    list('output2', 'pce', 'Consumption (SAAR%)', 'Output'),
+    list('output2', 'gross_pdi', 'Gross Investment (SAAR%)', 'Output'),
+    list('output2', 'exports', 'Exports (SAAR%)', 'Output'),
+    list('output2', 'imports', 'Imports (SAAR%)', 'Output'),
+    
+
+    list('output', 'unemp', 'Unemployment Rate (%)', 'Labor Market'),
+    list('output', 'ahe', 'Average Hourly Earnings (%)', 'Labor Market'),
+
+    list('output', 'cpi', 'Core CPI (Index 1982=100)', 'Inflation'),
+    list('output', 'inf_1y', 'Inflation (%)', 'Inflation'),
+
+    list('output', 'ffr', 'Fed Funds Rate (%)', 'Interest Rates'),
+    list('output', 'tyield_2y', '2-Year Treasury Yield (%)', 'Interest Rates'),
+    list('output', 'tyield_10y', '10-Year Treasury Yield (%)', 'Interest Rates'),
+    list('output', 'tyield_30y', '30-Year Treasury Yield (%)', 'Interest Rates'),
+    list('output', 'aaa_10y', '10-Year Corporate Aaa Yield (%)', 'Interest Rates'),
+    list('output', 'libor_1m', '1-Month LIBOR Rate (%)', 'Interest Rates'),
+    #list('output', 'ted_spread', 'TED Spread (%)', 'Interest Rates'),
+    
+    list('output', 'mort_30y', '30-Year Mortgage Rate (%)', 'Housing'),
+    list('output', 'hpi', 'All-Transactions House Price Index (Index 1980=100)', 'Housing'),
+    list('output', 'housing_starts', 'New Housing Starts (000s)', 'Housing'),
+    
+    list('output2', 'sp500', 'S&P 500', 'Equities'),
+    list('output', 'usd', 'US Dollar Index', 'Equities'),
+    
+    list('output2', 'bank_bal_sheet_ll', 'Bank Balance Sheet LL', 'Bank Bal Sheet')
+
+    # list('output', 'bank_cor_all', 'Delinquency Rate on All Loans, All U.S. Banks (%)', 'Banks'),
+    #list('output', 'bank_delinq_all', 'Charge-Off Rate on All Loans, All U.S. Banks (%)', 'Banks')
+  ) %>%
+  purrr::imap_dfr(., ~ setNames(., c('form', 'varname', 'description', 'category'))) %>%
+  tibble::rowid_to_column(., 'order') %>%
+  dplyr::mutate(., rowEnd = ifelse(!is.na(dplyr::lead(category, 1)) & category != dplyr::lead(category, 1), TRUE, FALSE)) %>%
+  purrr::transpose(.)
+
+
+keyForms = c('output', 'output2')
+keyVarnames = c('gdp', 'tyield_10y')
+keyDates = sc$pred[['baseline']]$output$date %>% .[1:10]
+
+
+for (scname in chooseScenarios) {
+  
+  tbl0 = paste0(list(
+    paste0('\\section{', sc$scenarios[[scname]]$longName, ' Scenario}'),
+    '\\vspace{-.2cm}',
+    '\\begin{table}[H]',
+    '\\centering',
+    '\\rowcolors{1}{white}{lightGray}',
+    '\\begingroup\\fontsize{7pt}{6.5pt}\\selectfont\\def\\arraystretch{2}',
+    paste0('\\begin{tabular}{r', paste0(rep('c', length(keyDates)), collapse = ''),'}'),
+    '\\bottomrule',
+    '\\rowcolor{darkRed}',
+    paste0(
+      '& ',
+      keyDates %>%
+        year(.) %>%
+        {lapply(unique(.) %>% setNames(., .), function(y) .[. == y] %>% length(.))} %>%
+        {lapply(names(.), function(y) paste0('\\multicolumn{', .[[y]], '}{c}{\\textcolor{white}{', y, '}}'))} %>%
+        paste0(., collapse = ' & ') %>%
+        paste0(., ' \\\\')
+    ),
+    '\\arrayrulecolor{darkRed} \\specialrule{4pt}{0pt}{-8pt} \\arrayrulecolor{white}',
+    # https://tex.stackexchange.com/a/18692
+    keyDates %>%
+      year(.) %>%
+      {lapply(unique(.) %>% setNames(., .), function(y)
+        which(. %in% y) %>% {list(start = head(., 1) + 1, end = tail(., 1) + 1)}
+        )} %>%
+      lapply(., function(x) paste0('\\cmidrule(lr){', x$start, '-', x$end, '}')) %>%
+      paste0(., collapse = ' ') %>%
+      paste0(., ' '),
+    '\\rowcolor{darkRed}',
+    '& ',
+      lapply(keyDates %>% fn$toStrDate(.),
+             function(x) paste0('\\textcolor{white}{' , str_sub(x, -2), '}')
+             ) %>% paste0(., collapse = ' & '),
+    '\\\\ [-.5ex]',
+    '\\arrayrulecolor{black} \\specialrule{1.5pt}{.5pt}{.5pt}',
+    lapply(prettyFormat, function(.row)
+    
+      sc$predFlat[scenario == scname & varname == .row$varname & form == .row$form] %>%
+        as_tibble(.) %>%
+        tidyr::spread(., date, value) %>%
+        dplyr::select(., as.character(keyDates)) %>%
+        unlist(.) %>%
+        lapply(., function(x)
+          if (x >= 1000) format(round(x, 0), big.mark = ',', nsmall = 0) else format(round(x, 2), nsmall = 2)
+          ) %>%
+        paste0(., collapse = ' & ') %>%
+        paste0(., '\\\\') %>%
+        paste0(
+          '\\parbox{6.5cm}{',
+          '\\raggedleft{{', sanitize(rds$d$params[[.row$varname]]$name), '}}\\begin{tiny}\\textit{ \\raggedleft(',
+          sanitize(rds$d$params[[.row$varname]][[paste0(.row$form, 'Units')]]), ')}\\end{tiny}} & ',  .) %>%
+        paste0(., {if (.row$rowEnd == TRUE) ' \\specialrule{1pt}{.5pt}{.5pt}' else ''})
+      ) %>%
+      paste0(., collapse = '\n'),
+    # '\\hline',
+    '\\specialrule{1.5pt}{0pt}{0pt}',
+    '\\end{tabular}',
+    '\\endgroup',
+    '\\end{table}',
+    '\n'
+    ), collapse = '\n')
+  
+  cat(tbl0)
+  
+  
+  txt =
+    paste0(
+      '\\begin{multicols}{2}',
+      {
+        if (scname == 'baseline_snv') '\\textbf{This scenario is an adjusted baseline forecast of the economy, implementing advisory recommendations provided by the Economic Working Group.} '
+        else ''
+      },
+      sanitize(scTexts[[scname]]),
+      '\\end{multicols}'
+    )
+  
+  cat(txt)
+  
+  cat(paste0('\\clearpage'))
+  # cat(res)
+  
+}
+@
+
+\appendix
+\begin{landscape}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+<<scenariosFull, results = 'asis'>>=
+fullFormatByCategory =
+  rds$d$params %>%
+  purrr::keep(., ~ .$isIntuitive == 'Y' & .$forecastMethod != 'NONE') %>%
+  lapply(., function(x){
+   
+    res =
+      tibble(
+        form = 'output',
+        varname = x$key,
+        category = x$category
+      ) %>%
+      {
+        if (!is.na(x$output2Form))
+          dplyr::bind_rows(
+            .,
+            tibble(
+              form = 'output2',
+              varname = x$key,
+              category = x$category
+            )
+          )
+        else .
+        } %>%
+      return(.)
+  }) %>%
+  dplyr::bind_rows(.) %>%
+  dplyr::mutate(
+    .,
+    rowEnd = ifelse(!is.na(dplyr::lead(category, 1)) & category != dplyr::lead(category, 1), TRUE, FALSE),
+    splitIndex = row_number() %>% {. %/% 45}
+    ) %>%
+  {lapply(unique(.$splitIndex), function(.idx)
+      dplyr::filter(., splitIndex == .idx) %>%
+      purrr::transpose(.)
+  )}
+
+  
+  # {lapply(unique(.$category) %>% setNames(., .), function(.category)
+  #     dplyr::filter(., category == .category) %>%    
+  #     purrr::transpose(.)
+  # )}
+
+keyDates = sc$pred[['baseline']]$output$date
+
+for (scname in chooseScenarios) {
+  
+  cat(paste0('\\section{', sc$scenarios[[scname]]$longName, ' Scenario: Detailed Table}'))
+  
+  for (fullFormat in (fullFormatByCategory)) {
+    
+    # cat(paste0('\\subsection*{', category, '}'))
+    
+    # fullFormat = fullFormatByCategory[[category]]
+    
+    tbl0 = paste0(list(
+      '\\begin{table}[H]',
+      '\\centering',
+      '\\rowcolors{1}{white}{lightGray}',
+      '\\begingroup\\fontsize{6pt}{5pt}\\selectfont\\def\\arraystretch{2}',
+      '\\setlength\\tabcolsep{1pt}', # Reduce col width
+      paste0('\\begin{tabular}{R{6cm}', paste0(rep('C{.8cm}', length(keyDates)), collapse = ''),'}'),
+      '\\bottomrule',
+      '\\rowcolor{darkRed}',
+      paste0(
+        '& ',
+        keyDates %>%
+          year(.) %>%
+          {lapply(unique(.) %>% setNames(., .), function(y) .[. == y] %>% length(.))} %>%
+          {lapply(names(.), function(y) paste0('\\multicolumn{', .[[y]], '}{c}{\\textcolor{white}{', y, '}}'))} %>%
+          paste0(., collapse = ' & ') %>%
+          paste0(., ' \\\\')
+      ),
+      '\\arrayrulecolor{darkRed} \\specialrule{3pt}{0pt}{-8pt} \\arrayrulecolor{white}',
+      # https://tex.stackexchange.com/a/18692
+      keyDates %>%
+        year(.) %>%
+        {lapply(unique(.) %>% setNames(., .), function(y)
+          which(. %in% y) %>% {list(start = head(., 1) + 1, end = tail(., 1) + 1)}
+          )} %>%
+        lapply(., function(x) paste0('\\cmidrule(lr){', x$start, '-', x$end, '}')) %>%
+        paste0(., collapse = ' ') %>%
+        paste0(., ' '),
+      '\\rowcolor{darkRed}',
+      '& ',
+        lapply(keyDates %>% fn$toStrDate(.),
+               function(x) paste0('\\textcolor{white}{' , str_sub(x, -2), '}')
+               ) %>% paste0(., collapse = ' & '),
+      '\\\\ [-.5ex]',
+      '\\arrayrulecolor{black} \\specialrule{1pt}{.5pt}{.5pt}',
+      lapply(fullFormat, function(.row)
+      
+        sc$predFlat[scenario == scname & varname == .row$varname & form == .row$form] %>%
+          as_tibble(.) %>%
+          tidyr::spread(., date, value) %>%
+          dplyr::select(., as.character(keyDates)) %>%
+          unlist(.) %>%
+          lapply(., function(x)
+            if (x >= 1000) format(round(x, 0), big.mark = ',', nsmall = 0) else format(round(x, 2), nsmall = 2)
+            ) %>%
+          paste0(., collapse = ' & ') %>%
+          paste0(., '\\\\') %>%
+          paste0(
+            '\\parbox{6cm}{',
+            '\\raggedleft{{', sanitize(rds$d$params[[.row$varname]]$name), '}}\\begin{tiny}\\textit{ \\raggedleft(',
+            sanitize(rds$d$params[[.row$varname]][[paste0(.row$form, 'Units')]]), ')}\\end{tiny}} & ',  .) %>%
+          paste0(., {if (.row$rowEnd == TRUE) ' \\specialrule{1pt}{.5pt}{.5pt}' else ''})
+        ) %>%
+        paste0(., collapse = '\n'),
+      # '\\hline',
+      '\\specialrule{1pt}{0pt}{0pt}',
+      '\\end{tabular}',
+      '\\endgroup',
+      '\\end{table}',
+      '\n'
+      ), collapse = '\n')
+  
+    cat(tbl0)
+    
+  }
+  
+  cat(paste0('\\clearpage'))
+}
+@
+
+\end{landscape}
+
+\end{document}

@@ -1,0 +1,866 @@
+\documentclass[titlepage]{article}
+<<library, echo=FALSE, warning=FALSE, message= F>>=
+opts_chunk$set(fig.show = "asis", fig.pos = 'H', fig.height = 4,
+               fig.align = 'center', message = FALSE, warning = FALSE, echo = F,
+               autodep = T, cache = F)
+
+options(stringsAsFactors = F, scipen = 999)
+
+library(SNVRegulatory1.5)
+library(tidyverse)
+library(knitr)
+library(RODBC)
+library(gridExtra)
+library(forecast)
+
+#writePath <- 'R:/regulatory/DFAST2018/'
+model_id <- ''
+
+# path <- rstudioapi::getActiveDocumentContext()$path %>%
+  # gsub(x = ., pattern = '3.MRM Doc/MRMtemplate.Rnw', replacement = '') 
+path <- gsub(x = getwd(), pattern = '3.MRM Doc', replacement = '') 
+model_rds_path <- paste0(path, '/1.Analyst/', model_id, '.rds')
+
+model <- readRDS(file = model_rds_path)
+
+#model <- readRDS(paste0(writePath, 'New Dev/Balance Sheet/18001 NPL/1.Analyst/18001.rds'))
+
+for (mod in c('uni', 'holdout', 'final')) {
+  if (!is.null(model[[mod]]$diagnostics$test_params)) {
+    model[[mod]]$diagnostics$test_params <- 
+      model[[mod]]$diagnostics$test_params %>% 
+      mutate_if(is.numeric, function(x) {format(round(x,digits = 3), nsmall = 3)}) %>%
+      mutate(Parameter = gsub(x= Parameter, pattern = '_', replacement = '\\_', fixed = T)) %>%
+      apply(X = ., MARGIN = 1,
+            FUN = function(x) { paste0('\\multicolumn{1}{c}{', x, '} ', collapse = '& ')}) %>% 
+      paste0(collapse = '\\\\ ')
+  }
+}
+
+model$final$diagnostics$param_change <- model$final$diagnostics$param_change %>% 
+  gather(., key = 'Parameter', value = 'Value', -Model) %>% 
+  spread(., key = 'Model', value = 'Value') %>% 
+  select(Parameter, Holdout = 'Short Model', Final = 'Full Model', 'Change (%)' = 'Change PCT') %>% 
+  mutate_if(is.numeric, function(x) { format(round(x, digits = 3), nsmall = 3)}) %>% 
+  mutate(Parameter = gsub(x= Parameter, pattern = '_', replacement = '\\_', fixed = T)) %>%
+  apply(X = ., MARGIN = 1, FUN = function(x) { paste0('\\multicolumn{1}{c}{', x, '} ', collapse = '& ')}) %>% 
+  paste0(collapse = '\\\\ ')
+
+showDvEvalDiff_1 = !any(is.null(model$dv$diagnostics$diff_1$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_1$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_1$plot_acf_text))
+
+showDvEvalDiff_2 = !any(is.null(model$dv$diagnostics$diff_2$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_2$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_2$plot_acf_text))
+
+@
+
+\usepackage{./latex/synovus-latex-packages}
+\newcommand{\purposeFooter}{\Sexpr{model$dv$desc}} % Set the center footer
+\newcommand{\nameOfIndex}{MRM Codes} % Set the name of the index
+%booleans must be lower case true or false for latex
+\setbool{@final}{false}  %to include or remove draftmark
+\setbool{@toc}{true}
+\setbool{@figures}{true} %to include or remove list of figures (still prints lists of tables if no figures are present)
+\setbool{@tables}{true} %to include or remove list of tables (still prints lists of tables if no tables are present)
+\setbool{@index}{true}  %to include or remove index (if true and no indices are present no index is printed since no idx file is produced by compiling the document)
+\usepackage{./latex/synovus-theme}
+
+\begin{document}
+%\SweaveOpts{concordance=TRUE}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    DOCUMENT LOGIC    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Show the dv evaluation section for the order of difference = 1
+\newbool{@dvevaldiff1}
+\setbool{@dvevaldiff1}{\Sexpr{tolower(showDvEvalDiff_1)}}
+
+% Show the dv evaluation section for the order of difference = 2
+\newbool{@dvevaldiff2}
+\setbool{@dvevaldiff2}{\Sexpr{tolower(showDvEvalDiff_2)}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\theTitle}{\Sexpr{paste0(model$id, " ",model$dv$desc)}}
+\newcommand{\authorList}{
+Sarah Lynch & \small\emph{\href{mailto:sarahlynch@synovus.com}{sarahlynch@synovus.com}}\normalsize\\
+Brian Perdomo & \small\emph{\href{mailto:brianperdomo@synovus.com}{brianperdomo@synovus.com}}\normalsize\\
+%Clint Irvin & \small\emph{\href{mailto:clintonirvin@synovus.com}{clintonirvin@synovus.com}}\normalsize\\
+% Anthony Polizzi & \small\emph{\href{mailto:brianperdomo@synovus.com}{brianperdomo@synovus.com}}\normalsize\\
+}
+\newcommand{\executiveSummary}{\paragraph{Executive Summary}
+\Sexpr{model$dv$desc} was aggregated quarterly at the portfolio level. A predictive model was developed integrating DFAST macroeconomic variables as predictors. Model characteristics and performance diagnostics were reviewed, and forecasts were made for each of the Federal Reserve provided scenarios. }
+\newcommand{\processDate}{\Sexpr{substr(model$date, 1, 8)}}
+%\newcommand{\authorSummaryGap}{ 2in }
+\input{./latex/titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Do not change any inputs for the \newcommand{} functions, this changes the variable name. \newcommand{\nameOfCommand}{Command contents as they should appear to latex.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Model Name: \Sexpr{model$dv$desc}}
+
+\begin{tabularx}{\textwidth}{l X}
+\textbf{\underline{Model Identifier:}}& \Sexpr{model$id}\\
+\textbf{\underline{Model Use:}}& DFAST Stress Testing (regulatory), Capital Planning \\
+\textbf{\underline{Model Owner:}}& Finance \\
+\textbf{\underline{Owner POC:}}& Kevin Brown (kevinbrown@synovus.com) \\
+\textbf{\underline{Category:}}& Corporate Finance \\
+\textbf{\underline{Model Type:}}& Portfolio Level (Quarterly) \\
+\textbf{\underline{Purpose:}}& The purpose of this project is to forecast quarterly values for \Sexpr{model$dv$desc} for each DFAST economic scenario.\\
+\textbf{\underline{Development Date:}}& \Sexpr{substr(model$date, 1, 8)}\\
+\end{tabularx}
+
+% \subsection{Summary}
+% 
+% 
+% \subsubsection{Analyst Response}
+% MDG recommends the use of this model without reservation. Considered collectively, model diagnostic characteristics, backtesting results, sensitivity testing, and forecast characteristics indicate appropriate model stability and sensitivity.
+
+\subsection{Purpose and Relevance}
+
+\textit{Purpose (CS1.1)\index{CS1.1 - Purpose}, Deployment intention (CS1.2)\index{CS1.2 - Deployment Intention}, Internal data relevance (CS2.1)\index{CS2.1 - Internal Data Relevance}}
+
+This model was developed with the purpose of forecasting quarterly \Sexpr{model$dv$desc} for this segment for each of the three DFAST macroeconomic scenarios. Model forecasts are intended to assist Capital Management in anticipating changes in losses resulting from economic fluctuations in support of Stress Testing and Capital Planning efforts.
+
+\subsection{Modeling Approach}
+\subsubsection{Design, Theory, and Methods}
+\textit{Design and theory(CS1.3)\index{CS1.3 - Design and Theory}, Methodology (CS1.4)\index{CS1.4 - Methodology}}
+
+Series data was available in quarterly periods at the portfolio level, resulting in a time-series approach to model development. All domestic macroeconomic variables provided in the \Sexpr{substr(model$date, 1, 4)} DFAST scenario set were considered for inclusion in the development of this model.
+
+\subsection{Model Development Process}Model Development Group (MDG) followed internal standards of time-series modeling in the development of this model. Series and macroeconomic data were evaluated as time-series with lags and differencing used in model structures. Special emphasis was placed upon model stationarity and time-based structure in model residuals during all points of evaluation. Final models were evaluated for retention while considering model diagnostics, in-time and out-of-time forecast performance, and quality of scenario forecasts.
+
+
+\subsubsection{Out-of-Time/Out-of-Sample Testing (Holdout Procedures)}
+\textit{Out-of-sample testing (CS3.2)\index{CS3.2 - Out-of-Sample Testing}, Out-of-time testing (CS3.3)\index{CS3.3 - Out-of-Time Testing}, (CS3.7)\index{CS3.7 - Out-of-Time Testing}, Backtesting used as form of outcomes analysis (OA2.Q2)\index{OA2.Q2 - Backtesting as Outcomes Analysis}, Documentation of backtesting (OA2.2)\index{OA2.2 - Documentation of Backtesting}, Backtesting encompasses intended use (OA2.3)\index{OA2.3 - Backtesting Encompasses Intended Use}, Backtesting conducted over varying periods and conditions (OA2.4)\index{OA2.4 - Backtesting over Varying Conditions}, Development of confidence intervals around model forecasts (OA2.5)\index{OA2.5 - Confidence Intervals}, Backtesting results interpreted (OA2.6)\index{OA2.6 - Backtesting Results}, Accounting for results following outside acceptable thresholds (OA2.7)\index{OA2.7 - Accounting for Results Outside of Acceptable Thresholds}}
+
+In order to evaluate all developed models with regards to in-time and out-of-time forecast accuracy, a group of holdout data was withheld from the data used to train the model. The last four observations were withheld constituting the holdout data. The model was trained on all available observations up until the holdout period. The model was then used to generate in-time forecasts for all observations in the initial training set and out-of-time forecasts for all periods in the holdout data set. Each model was developed using this approach to allow the comparison of in-time and out-of-time forecast performance across candidate models.
+
+\subsubsection{Scenario Forecasting}DFAST modeling requires that three scenarios be used to generate separate forecasts for each developed model. Each economic scenario includes quarterly macroeconomic variable values to be used in forecast generation. Each scenario begins using forecasted macroeconomic values as of \Sexpr{gsub(x = model$final$data$base$df$strDate[max(seq(1, nrow(model$final$data$base$df))[!is.na(model$final$data$base$df[model_get_dv_name(model$final$model)])] + 1)], pattern = '.', replacement = ' Q', fixed = T)} which continue through \Sexpr{gsub(x=max(model$final$data$base$df$strDate), pattern = '.', replacement = ' Q', fixed = T)} resulting in a 13 quarter forecast window.
+
+A \texttt{base scenario} is provided that represents continued gradual economic recovery.
+
+An \texttt{adverse scenario} is provided that represents mild economic slowing.
+
+A \texttt{severely adverse} scenario is provided that represents the rapid onset of a severely recessed economic environment.
+
+
+
+\section{Dependent Value Processing}
+
+\textit{Internal data quality(CS2.2)\index{CS2.2 - Internal Data Quality},  Assessment  of  internal  data  (OM2.1)\index{OM2.1 - Assessment of Internal Data},  Assessment  of  internal  data  and  information  quality (OM2.2)\index{OM2.2 - Assessment of Internal Data and Information Quality}}
+
+All values represent series ???valueordollars??? for quarters from \Sexpr{gsub('\\.', ' Q', min(model$dv$data$df$strDate))} through \Sexpr{gsub('\\.', ' Q', max(model$dv$data$df$strDate))} for a total of \Sexpr{nrow(model$dv$data$df)} observations.
+
+The data was delivered to Model Development Group (MDG) by upload to the MDG developed and maintained Data Management System (DMS). The database in which the DV values were stored was queried to load the values into the analyst environment. The DV data was then formatted and made ready to join with DFAST scenario values.
+
+
+\subsubsection{Assumptions}
+\textit{Qualitative  assumptions  (OM5.3)\index{OM5.3 - Qualitative Assumptions},  List  of  assumptions  (OM5.Q2)\index{OM5.Q2 - List of Assumptions},  Evidence  supporting  assumptions (OM5.4)\index{OM5.4 - Evidence Supporting Assumptions}}
+
+There were no model-specific qualitative assumptions.
+
+\subsubsection{Testing, Use, and Considerations}
+\textit{Testing encompasses model intended use (OM6.8)\index{OM6.8 - Testing Encompasses Model Intended Use}, Consideration of model issues (OM6.9)\index{OM6.9 - Consideration of Model Issues}}
+
+The testing was performed on the product segments that are defined within the scope of the model group. 
+
+\subsubsection{Impact on Other Models}
+\textit{Impact on other (endogenous) models relying on results (OM6.10)\index{OM6.10 - Impact on Endogenous Models Relying on Results}}
+
+The portfolio level models do not impact any other model group.The relationship is quantitative for adverse scenarios and more qualitative for the Base scenario since the Base scenario incorporates projection methods consistent with budgeting and capital planning processes rather than a single model or calculation.  
+
+%The portfolio level models impact the DFAST Balance Sheet model group.The relationship is quantitative for adverse scenarios and more qualitative for the Base scenario since the Base scenario incorporates projection methods consistent with budgeting and capital planning processes rather than a single model or calculation.   
+
+%The output of this model is used to determine a component of the Allowance for Loan and Lesase Losses that impacts its balance.
+
+%This model has no dependent model dependency risk as no quantitative or qualitative models depend on the output of this model. It should, however, be noted that the output of this and affiliated portfolio-level balance models are used in generating estimates of deposits and losses for the purpose of higher-level asset management.
+
+%The output from the Balance Sheet models is used to convert loss rates estimated in the credit loss forecasting models to dollar terms. The projected loan balances are used as inputs in other models including other credit losses and non-performing assets. The model output for other credit losses and non-performing assets are percentages of total loans, so calculations for these items are completed after loan balances are derived.
+
+\subsubsection{Supervisory Concerns/Guidance}\textit{Supervisory concerns/guidance (CS1.8)\index{CS1.8 - Supervisory Concerns/Guidance}}
+
+There are no supervisory concerns or guidance specifically related to this model.
+
+\subsubsection{Data Adjustments}
+\textit{Internal data adjustments, recoding, outlier removal, etc. (CS2.3)\index{CS2.3 - Internal Data Adjustments}, Internal data proxies (CS2.4)\index{CS2.4 - Internal Data Proxies}}
+
+\Sexpr{model$dv$data_adjust_text}
+
+\subsection{Series Structure and Stationarity}
+\Sexpr{model$dv$diagnostics$diff_0$plot_uni_text}
+<<univariateEval, fig.cap='Univariate DV Evaluation'>>=
+  model$dv$diagnostics$diff_0$plot_uni
+@
+
+\Sexpr{model$dv$diagnostics$diff_0$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Univariate DV Evaluation - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_0$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$dv$diagnostics$diff_0$plot_acf_text}
+<<uniEvalACFNonDiff, fig.cap='Univariate DV Evaluation - ACF and PACF', fig.height=6>>=
+  model$dv$diagnostics$diff_0$plot_acf
+              
+@
+
+\ifbool{@dvevaldiff1} {
+
+\Sexpr{model$dv$diagnostics$diff_1$plot_uni_text}
+<<uniEvalDiff1Plot, fig.cap='Univariate DV Evaluation - Order of Difference = 1', eval = showDvEvalDiff_1>>=
+  model$dv$diagnostics$diff_1$plot_uni
+@
+
+\Sexpr{model$dv$diagnostics$diff_1$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Univariate DV Evaluation - Order of Difference = 1 - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_1$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$dv$diagnostics$diff_1$plot_acf_text}
+<<uniEvalACFDiff1, fig.cap='Univariate DV Evaluation - Order of Difference = 1 - ACF and PACF', fig.height=6, eval = showDvEvalDiff_1>>=
+  model$dv$diagnostics$diff_1$plot_acf
+@
+
+}
+
+\ifbool{@dvevaldiff2}{
+
+\Sexpr{model$dv$diagnostics$diff_2$plot_uni_text}
+<<uniEvalDiff2Plot, fig.cap='Univariate DV Evaluation - Order of Difference = 2', eval = showDvEvalDiff_2>>=
+  model$dv$diagnostics$diff_2$plot_uni
+@
+
+\Sexpr{model$dv$diagnostics$diff_1$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Univariate DV Evaluation - Order of Difference = 2 - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$dv$diagnostics$diff_2$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$dv$diagnostics$diff_2$plot_acf_text}
+<<uniEvalACFDiff2, fig.cap='Differenced Series - ACF and PACF', fig.height=6, eval = showDvEvalDiff_2>>=
+  model$dv$diagnostics$diff_2$plot_acf
+@
+
+}
+
+%' \subsubsection{Outlier Consideration}
+%' Visual inspection of the differenced series suggested the presence of one or more outliers. These outliers were not tested or considered for inclusion in the model structure in the form of pulse variables. MDG policy is to model for outliers when two conditions are met, visual identification in the indifferenced series and SME confirmation that the candidate observation represents an abnormal event (e.g. bulk sale or similar). As the outliers were only readily apparent in the differenced series, outlier modeling was not considered.
+%'
+\subsection{Univariate ARIMA Structure}
+
+\Sexpr{model$uni$diagnostics$uni_text}
+\begin{table}[H] \centering 
+  \caption{Univariate ARIMA Parameter Significance} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Parameter} & \multicolumn{1}{c}{Estimate} & \multicolumn{1}{c}{Std. Error} & \multicolumn{1}{c}{t} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\Sexpr{model$uni$diagnostics$test_params} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$uni$diagnostics$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Univariate ARIMA - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+
+\Sexpr{model$uni$diagnostics$plot_acf_text}
+<<uniARIMAACF, fig.cap='Univariate ARIMA - ACF and PACF Plots', fig.height=6>>=
+ model$uni$diagnostics$plot_acf
+@
+
+\Sexpr{model$uni$diagnostics$test_box_ljung_text}
+
+\begin{table}[H] \centering 
+  \caption{Univariate ARIMA - Box-Ljung Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Lag} & 
+  \multicolumn{1}{c}{ChiSq} & 
+  \multicolumn{1}{c}{df} & 
+  \multicolumn{1}{c}{p} & 
+  \multicolumn{1}{c}{acf1} & 
+  \multicolumn{1}{c}{acf2} & 
+  \multicolumn{1}{c}{acf3} & 
+  \multicolumn{1}{c}{acf4} & 
+  \multicolumn{1}{c}{acf5} & 
+  \multicolumn{1}{c}{acf6} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{ 6} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$ChiSq[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$df[1], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$p[1], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf1[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf2[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf3[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf4[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf5[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf6[1], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{12} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$ChiSq[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$df[2], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$p[2], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf1[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf2[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf3[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf4[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf5[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf6[2], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{18} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$ChiSq[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$df[3], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$p[3], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf1[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf2[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf3[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf4[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf5[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf6[3], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{24} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$ChiSq[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$df[4], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$p[4], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf1[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf2[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf3[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf4[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf5[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$uni$diagnostics$test_box_ljung$acf6[4], digits = 3), nsmall = 3)}} \\ 
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$uni$diagnostics$plot_normal_plots_text}
+<<uniARIMANormality, fig.cap='Univariate ARIMA - Normality of Residuals'>>=
+  marrangeGrob(model$uni$diagnostics$plot_normal,  nrow = 1, ncol = 2, top = NULL)
+@
+
+\Sexpr{model$uni$summary_text}
+
+\section{Covariate Data Processing}
+\subsection{Scenario Data}
+The scenario data was loaded into the modeling environment using the MDG 
+developed automated function and joined to the dependent variable. All dependent variables were included already-differenced as reflected in the documentation outlining \texttt{Predictor Evaluation}.
+
+\section{Modeling With Covariates}
+\subsection{Identifying Covariate Candidates}
+Cross correlation function (CCF) plots were generated as a means of identifying relationships between the dependent variable and predictor variables. A separate CCF plot was produced for each predictor variable relating it to the residuals of the univariate model at different lags. It is noted that all differenced DJI values were also divided by 1000 during processing as a means of accomodating software processing of small numbers.
+
+
+<<multiARIMACCFPlots1, fig.height=c(8,8,8), fig.cap=paste0('CCF Plots (', seq(1,5), ' of 5)')>>=
+
+plot_ccf_text <- paste0('\\begin{itemize}', paste0('\\item{', model$dv$diagnostics$plot_ccf_text, '}', collapse = ''), '\\end{itemize}')
+
+marrangeGrob(model$dv$diagnostics$plot_ccf[1:4],  nrow = 2, ncol = 2, top = NULL)
+marrangeGrob(model$dv$diagnostics$plot_ccf[5:8],  nrow = 2, ncol = 2, top = NULL)
+marrangeGrob(model$dv$diagnostics$plot_ccf[9:12],  nrow = 2, ncol = 2, top = NULL)
+marrangeGrob(model$dv$diagnostics$plot_ccf[13:16],  nrow = 2, ncol = 2, top = NULL)
+marrangeGrob(model$dv$diagnostics$plot_ccf[17:19],  nrow = 2, ncol = 2, top = NULL)
+@
+
+\Sexpr{plot_ccf_text}
+
+
+\Sexpr{model$holdout$sum_text}
+
+\subsection{Model Evaluation}
+\Sexpr{model$holdout$diagnostics$test_param_text}
+\begin{table}[H] \centering 
+  \caption{Holdout Multivariate ARIMA - Parameter Significance} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Parameter} & \multicolumn{1}{c}{Estimate} & \multicolumn{1}{c}{Std. Error} & \multicolumn{1}{c}{t} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\Sexpr{model$holdout$diagnostics$test_params} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$holdout$diagnostics$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Holdout Multivariate ARIMA - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$holdout$diagnostics$plot_acf_text}
+<<multiARIMAACFPlots,fig.cap='ARIMA - Holdout - ACF and PACF Plots', fig.height=6>>=
+ model$holdout$diagnostics$plot_acf
+@
+
+\Sexpr{model$holdout$diagnostics$plot_normal_text}
+<<multiARIMANormality, fig.cap='ARIMA - Holdout - Normality of Residuals'>>=
+marrangeGrob(model$holdout$diagnostics$plot_normal, nrow=1, ncol=2, top = NULL)
+@
+
+\Sexpr{model$holdout$diagnostics$test_box_text}
+
+\begin{table}[H] \centering 
+  \caption{Holdout Multivariate ARIMA - Box-Ljung Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Lag} & 
+  \multicolumn{1}{c}{ChiSq} & 
+  \multicolumn{1}{c}{df} & 
+  \multicolumn{1}{c}{p} & 
+  \multicolumn{1}{c}{acf1} & 
+  \multicolumn{1}{c}{acf2} & 
+  \multicolumn{1}{c}{acf3} & 
+  \multicolumn{1}{c}{acf4} & 
+  \multicolumn{1}{c}{acf5} & 
+  \multicolumn{1}{c}{acf6} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{ 6} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$ChiSq[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$df[1], digits = 0), nsmall = 0)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$p[1], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf1[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf2[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf3[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf4[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf5[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf6[1], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{12} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$ChiSq[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$df[2], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$p[2], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf1[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf2[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf3[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf4[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf5[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf6[2], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{18} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$ChiSq[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$df[3], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$p[3], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf1[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf2[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf3[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf4[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf5[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf6[3], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{24} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$ChiSq[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$df[4], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$p[4], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf1[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf2[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf3[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf4[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf5[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_box_ljung$acf6[4], digits = 3), nsmall = 3)}} \\ 
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$holdout$diagnostics$sum_text}
+
+\subsubsection{In-Time and Out-of-Time Forecast Evaluation}
+The model with covariates was evaluated for in-time and out-of-time forecast performance using both visual inspection and calculated performance metrics. Performance metrics for in-time and out-of-time forecast accuracy are displayed below, though offer little interpretable insight in the absence of model comparison.
+\begin{table}[H] \centering 
+  \caption{Holdout Multivariate ARIMA - Forecast Accuracy} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & 
+  \multicolumn{1}{c}{MAE} & 
+  \multicolumn{1}{c}{MAPE} & 
+  \multicolumn{1}{c}{MSE} & 
+  \multicolumn{1}{c}{RMSE} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{In-Time} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MAE[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MAPE[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MSE[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$RMSE[1], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{Out-of-Time} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MAE[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MAPE[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$MSE[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$holdout$diagnostics$test_accuracy$RMSE[2], digits = 3), nsmall = 3)}} \\ 
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$holdout$diagnostics$plot_intime_text}
+<<multiARIMAInTimePlot, fig.cap='ARIMA - Holdout - In-Time Forecasts'>>=
+ model$holdout$diagnostics$plot_intime
+@
+
+\Sexpr{model$holdout$diagnostics$plot_holdout_text}
+<<multiARIMAHoldoutPlot, fig.cap='ARIMA - Holdout - Out-of-Time Forecasts'>>=
+ model$holdout$diagnostics$plot_holdout
+@
+
+\subsubsection{Holdout Scenario Forecasts}
+
+\Sexpr{model$holdout$diagnostics$plot_scenario_text}
+<<multiARIMAHoldoutFcasts, fig.cap='ARIMA - Holdout Forecasts'>>=
+ model$holdout$diagnostics$plot_scenario
+@
+
+
+\section{Final Model}
+\Sexpr{model$final$model$text}
+
+\subsection{Re-fitting - Final ARIMA model}
+
+\textit{In-sample testing (CS3.1)\index{CS3.1 - In-Sample Testing}, product variety (CS3.10)\index{CS3.10 - Product Variety}, Model accuracy, stability, and robustness (OM2.10)\index{OM2.10 - Model Accuracy, Stability, and Robustness}, Evaluation of various model components (OM6.5)\index{OM6.5 - Evaluation of Various Model Components}}
+
+\Sexpr{model$final$diagnostics$text}
+
+\subsubsection{Evaluation of Model Components}
+\textit{Evaluation of various model components (CS3.6)\index{CS3.6 - Evaluation of Model Components}, Evidence supporting assumptions (CS4.4)\index{CS4.4 - Evidence Supporting Assumptions}}
+
+\Sexpr{model$final$diagnostics$test_param_text}
+\begin{table}[H] \centering 
+  \caption{Final Multivariate ARIMA - Parameter Significance} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Parameter} & \multicolumn{1}{c}{Estimate} & \multicolumn{1}{c}{Std. Error} & \multicolumn{1}{c}{t} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\Sexpr{model$final$diagnostics$test_params} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$final$diagnostics$test_adf_text}
+
+\begin{table}[H] \centering 
+  \caption{Final Multivariate ARIMA - Augmented Dickey-Fuller Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Type} & \multicolumn{1}{c}{Lags} & \multicolumn{1}{c}{Tau} & \multicolumn{1}{c}{p} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Zero Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[1],3), nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[1],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[2],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[2],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[3],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[3],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Single Mean} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[4],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[4],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[5],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[5],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[6],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[6],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{Trend} & \multicolumn{1}{c}{0} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[7],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[7],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{1} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[8],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[8],3),nsmall = 3)}} \\
+\multicolumn{1}{c}{ } & \multicolumn{1}{c}{2} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$Tau[9],3),nsmall = 3)}} & \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_adf$p[9],3),nsmall = 3)}} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$final$diagnostics$plot_acf_text}
+<<FinalACFPlots, fig.cap='Final ARIMA Model - ACF and PACF Plots', fig.height=6>>=
+ model$final$diagnostics$plot_acf
+@
+
+\Sexpr{model$final$diagnostics$plot_normal_text}
+<<FinalNormality, fig.cap='Final ARIMA Model - Normality of Residuals'>>=
+marrangeGrob(model$final$diagnostics$plot_normal,ncol=2,nrow=1,top=NULL)
+@
+
+\Sexpr{model$final$diagnostics$test_box_text}
+
+\begin{table}[H] \centering 
+  \caption{Final Multivariate ARIMA - Box-Ljung Test} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Lag} & 
+  \multicolumn{1}{c}{ChiSq} & 
+  \multicolumn{1}{c}{df} & 
+  \multicolumn{1}{c}{p} & 
+  \multicolumn{1}{c}{acf1} & 
+  \multicolumn{1}{c}{acf2} & 
+  \multicolumn{1}{c}{acf3} & 
+  \multicolumn{1}{c}{acf4} & 
+  \multicolumn{1}{c}{acf5} & 
+  \multicolumn{1}{c}{acf6} \\ 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{ 6} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$ChiSq[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$df[1], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$p[1], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf1[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf2[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf3[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf4[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf5[1], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf6[1], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{12} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$ChiSq[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$df[2], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$p[2], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf1[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf2[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf3[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf4[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf5[2], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf6[2], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{18} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$ChiSq[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$df[3], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$p[3], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf1[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf2[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf3[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf4[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf5[3], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf6[3], digits = 3), nsmall = 3)}} \\ 
+\multicolumn{1}{c}{24} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$ChiSq[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$df[4], digits = 0), nsmall = 0)}} &  
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$p[4], digits = 3), nsmall = 3)}} &
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf1[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf2[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf3[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf4[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf5[4], digits = 3), nsmall = 3)}} & 
+  \multicolumn{1}{c}{\Sexpr{format(round(model$final$diagnostics$test_box_ljung$acf6[4], digits = 3), nsmall = 3)}} \\ 
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\Sexpr{model$final$diagnostics$final_diag_text}
+
+\subsubsection{Parameter Changes}
+
+\Sexpr{model$final$diagnostics$test_paramchange_text}
+\begin{table}[H] \centering 
+  \caption{Parameter Changes} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} D{.}{.}{-3} } 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+\multicolumn{1}{c}{Parameter} & \multicolumn{1}{c}{Holdout} & \multicolumn{1}{c}{Final} & \multicolumn{1}{c}{Change (\%)} \\ 
+\hline \\[-1.8ex] 
+\Sexpr{model$final$diagnostics$param_change} \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 
+
+\subsubsection{In-Time Forecasts}
+
+\Sexpr{model$final$diagnostics$plot_intime_text}
+<<FinalInTimeFcasts, fig.cap='Final ARIMA Model - In-time Forecasts'>>=
+ model$final$diagnostics$plot_intime
+@
+
+\subsubsection{Evaluation of Model Outcomes - Scenario Forecasts}
+
+\textit{Evaluation of model outcomes (CS3.12)\index{CS3.12 - Evaluation of Model Outcomes}}
+
+\Sexpr{model$final$diagnostics$plot_scenario_text}
+<<FinalScenFcasts, fig.cap='Final ARIMA Model - Forecasts'>>=
+  model$final$diagnostics$plot_scenario
+@
+
+\subsection{Sensitivity Testing}
+\textit{Model stability: univariate sensitivity testing  (CS3.4), (OM6.3)\index{CS3.4 - Model Stability: Univariate Sensitivity Testing} \index{OM6.3 - Model Stability: Univariate Sensitivity Testing}}
+
+In order to facilitate sensitivity testing, a series of shocks were applied to the base-scenario values of each macroeconomic DFAST predictor throughout the span of the forecasts. For univariate sensitivity testing, forecasts were generated replacing the base-scenario values with the shocked values one at a time when creating forecasts. For multivariate sensitivity testing, all shocked values simultaneously replaced all base-scenario values when generating the forecast.
+
+The shocked values were produced by multiplying the base scenario values by either 1.10 or 0.90 depending on the direction of the shock.
+
+The following variables use the 0.90 shock value: gdp\_real, gdp\_nom, dispinc\_real, dispinc\_nom, cpi\_inf, treas\_3month, treas\_5year, treas\_10year, mort, prime, dji, hpi, and cri.
+
+The following variables use the 1.10 shock value: unem, bbb, volatility, bbb\_cs, mort\_cs, and treas\_10y\_3m.
+
+
+\subsubsection{Univariate Shocks}
+\Sexpr{model$final$diagnostics$plot_shock_text}
+<<FinalShockFcasts>>=
+  model$final$diagnostics$plot_shock
+@
+
+\subsubsection{Multivariate Shock}
+
+\textit{Multivariate sensitivity testing (CS3.5), (OM6.4)\index{CS3.5 - Multivariate Sensitivity Testing} \index{OM6.4 - Multivariate Sensitivity Testing}}
+
+Whereas additional univariate and multivariate sensitivity testing was conducted, it is noted that generation of scenario forecasts with this model provides evidence of model stability and appropriate sensitivity. The DFAST scenarios cover the full range of expected economic conditions for the forecast period, from serious recession to continued economic recovery. For each scenario, each predictor varies over time as a reflection of the complex time-base macroeconomic environment associated with that particular scenario. The retained model generated reasonable and appropriate forecasted values as judged by the Capital Management SME and analyst when simultaneously evaluating all three scenario forecasts. The reasonableness of these forecasts offers substantial evidence supporting the ability of the retained model to generate reasonable forecasts accross a wide variety of economic scenarios.
+
+\Sexpr{model$final$diagnostics$plot_shock_multi_text}
+
+\subsubsection{Sensitivity Testing of Assumptions}
+
+\textit{Sensitivity testing of assumptions (CS4.4)\index{CS4.4 - Sensitivity Testing of Assumptions}}
+
+Not applicable for this model as no quantitative assumptions were used in model development or forecast generation.
+
+\subsection{Model Uncertainty}
+
+\textit{Model uncertainty, inaccuracy, or instability (CS3.11)\index{CS3.11 - Model Uncertainty, Inaccuracy, or Instability}, Quantifying model uncertainty (CS6.1)\index{CS6.1 - Quantifying Model Uncertainty}}
+
+When considered collectively, the model diagnostics, out-of-time testing, and generation of forecast values over multiple ranges indicate that this is a model of acceptable accuracy with uncertainty within that deemed acceptably by SNV model management policy. In order to quantify model uncertainty, the model out-of-time mean absolute error (MAE) value will be used as an estimate of expected uncertainty for any given forecast generated using this model. The MAE is determined to be a 'most-likely' error estimator and, when applied universally to every forecasted value to decrease forecasted index values, a method that will remain conservative while not generating unreasonable inflation of error estimates.
+
+The MAE defined uncertainty for this model was observed at \textbf{\Sexpr{model$holdout$diagnostics$test_accuracy$MAE[2]}}.
+
+\subsection{Benchmark Comparison}
+
+\textit{Benchmarking (OM1.4)\index{OM1.4 - Benchmarking}, Benchmark model used, quality of benchmark model (CS5.1)\index{CS5.1 - Benchmark Model and Quality}, Discussion of differences from benchmark (CS5.Q2)\index{CS5.Q2 - Differences from Benchmark}, Range of differences (CS5.2)\index{CS5.2 - Range of Differences from Benchmark}, Is the benchmark used (OM4.Q1)\index{OM4.Q1 - Is the Benchmark Used}, Quality of benchmark (OM4.1)\index{OM4.1 - Quality of Benchmark}, Benchmark differs but not in error (OM4.Q2)\index{OM4.Q2 - Benchmark Differs But Not In Error}, Differences within appropriate range (OM4.2)\index{OM4.2 - Differences Within Appropriate Range}}
+
+There was no comparison of the forecasts generated by the retained model against a less granular benchmark model developed for the same portfolio. This model was developed at the least granular level possible, and as such forecasts from this scenario represent the smallest level of portfolio values appropriate to collectively model.
+
+\subsection{Strengths and Limitations}
+\textit{Model merits (CS1.6)\index{CS1.6 - Model Merits}, Model limitations (CS1.7)\index{CS1.7 - Model Limitations}, (OM6.6)\index{OM6.6 - Model Limitations}, Assessment of potential limitations (CS3.8)\index{CS3.8 - Assessment of Potential Limitations}, Model robustness (CS3.9)\index{CS3.9 - Model Robustness}, (OM6.7)\index{OM6.7 - Model Robustness}}
+
+\subsubsection{Model Strengths}
+<<echo = F>>=
+strengths_text <- paste0('\\begin{itemize}', paste0('\\item{', model$final$diagnostics$strengths_text, '}', collapse = ''), '\\end{itemize}')
+@
+\Sexpr{strengths_text}
+
+\subsubsection{Model Limitations}
+<<echo = F>>=
+limitations_text <- paste0('\\begin{itemize}', paste0('\\item{', model$final$diagnostics$limitations_text, '}', collapse = ''), '\\end{itemize}')
+@
+\Sexpr{limitations_text}
+
+\subsection{Long Forecast Horizon}
+
+\textit{Long forecast horizon (OA2.Q3)\index{OA2.Q3 - Long Forecast Horizon}, Backtesting of long forecast horizon (OA2.9)\index{OA2.9 - Backtesting of Long Forecast Horizon}, Early warning metrics (OA2.10)\index{OA2.10 - Early Warning Metrics}}
+
+The 13 quarter forecast horizon generated is a standard forecast horizon for DFAST. The forecast horizon does not extend beyond five years, which has been determined by SNV Treasury to be a long forecast horizon. All model forecasts will be re-generated at a not-less-than annual schedule. Re-development of this model will be conducted on a schedule as outlined in SNV model management policy. At each instance of consideration for redevelopment, backtesting will be conducted.
+
+\subsection{Supervisory Concerns/Guidance}
+\textit{Supervisory concerns/guidance (CS1.8)\index{CS1.8 - Supervisory Concerns/Guidance}}
+
+There are no specific regulatory concerns or guidance related to the use of this model.
+
+
+\paragraph{Overrides and Ongoing Monitoring Practices}There are no explicit overrides associated with this model. Ongoing monitoring practices can be found in SNV Model Management policy documentation.
+
+\subsection{Model Uncertainty}
+\textit{Accounting for model uncertainty: adjustments, restrictions, etc. (CS6.3)\index{CS6.3 - Accounting for Model Uncertainty}, Ongoing Monitoring Plan/Policy (OM1.1)\index{OM1.1 - Ongoing Monitoring Plan/Policy}, Management of model overrides (OM1.3)\index{OM1.3 - Management of Model Overrides}, Benchmarking (OM1.4)\index{OM1.4 - Benchmarking}, Qualitative adjustments and model assumptions (OM1.5)\index{OM1.5 - Qualitative Adjustments and Model Assumptions}, OM tests (OM1.6)\index{OM1.6 - OM Tests}, Use of overrides (OM3.Q1)\index{OM3.Q1 - Use of Overrides}, Overrides due to model limitations (OM3.Q2)\index{OM3.Q2 - Overrides Due to Model Limitations}, Reasons for overrides (OM3.1)\index{OM3.1 - Reasons for Overrides}, Tracking of override performance (OM3.2)\index{OM3.1 - Tracking of Override Performance}, Is rate of overrides high or is override process improvement to model performance (OM3.Q3)\index{OM3.Q3 - Rate of Overrides}, Efforts in model redevelopment relevant to override use (OM3.3)\index{OM3.3 - Model Redevelopment Efforts Relevent to Override}, Qualitative judgments applied (OM5.Q1)\index{OM5.Q1 - Qualitative Judgments Applied}, Review of qualitative adjustments (OM5.1)\index{OM5.1 - Review of Qualitative Adjustments}, Qualitative adjustments sensitivity testing (OM5.2)\index{OM5.2 - Qualitative Adjustments Sensitivity Testing}, Sensitivity testing of assumptions (OM5.5)\index{OM5.5 - Sensitivity Testing of Assumptions}}
+
+Model uncertainty is quantified by using the final model MAE value calculated for the holdout forecast period. All other items already addressed earlier in this document.
+
+\subsection{Model Reporting}
+\textit{Model reporting (OM1.2)\index{OM1.2 - Model Reporting}}
+
+The modeling process and technical documentation for this model, contained in this document, provides an exhaustive description of each process, content, data, and diagnostic model related materials and results. All non technical documentation and application of this model currently and will continue to refer to the most recent technical documentation.
+
+\subsection{Model Use and Documentation Availability}
+\textit{Model reports used for business decision making (OM2.Q3)\index{OM2.Q3 - Model Reports Used for Business Decision Making}, Model reports clear (OM2.9)\index{OM2.9 - Model Reports Clear}, Availability of reports regarding model accuracy, stability, and robustness (OM2.10)\index{OM2.10 - Availability of Reports Regarding Model Accuracy, Stability, and Robustness}, Availability of reports regarding key assumptions (OM2.11)\index{OM2.11 - Availability of Reports Regarding Key Assumptions}}
+
+The model will be used in Stress Testing and for regulatory purposes and as a source of information in Capital Planning procedures. All documentation, code, and output are made readily available to the MDG, Treasury, MRMG, model owner, and any other concerned parties within the parent organization.
+
+\subsection{Qualitative Adjustments}
+
+There were no qualitative adjustments made to model forecasts.
+
+
+\clearpage
+\appendix
+\section{Appendix}
+The following command lists the version of \textsf{R} and packages used to build this document.
+<<sessionInfo>>=
+sessionInfo()
+@
+
+\end{document}

@@ -1,0 +1,24 @@
+\usepackage[margin=1in,headheight=48pt]{geometry} % Sets page margins and header footer height. 
+\usepackage{fancyhdr,tabularx,float,graphicx,url,amsmath} % fancyhdr: Allows images in header/footer. Tabularx: Allows for easy table formatting % float: Allows images to be placed in specific locations. graphicx: Allows for including pdf files (not alway used but is useful). url: Allows for easy hyperlinks
+\usepackage[hypertexnames=false]{hyperref}% hyperref: Similar to url but makes emails easier. 
+\usepackage{makeidx} %allows for indexes
+\usepackage{etoolbox, lipsum} %allows for booleans
+\usepackage{xcolor, framed} %allows for highlighting
+\colorlet{shadecolor}{yellow!40} % sets highlight color
+
+%%% The following initializes booleans to change the structure of the pdf.
+\newbool{@final}
+\newbool{@toc}
+\newbool{@figures}
+\newbool{@tables}
+\newbool{@index}
+\newbool{@author1}
+\newbool{@author2}
+\newbool{@author3}
+\newbool{@author4}
+\newbool{@author5}
+\newbool{@author6}
+\newbool{@supervisor}
+%%% This command allows for easy formatting of the R used to reference the language. It is for ease of use and isn't required. 
+\newcommand{\R}{\textsf{R}{}}
+

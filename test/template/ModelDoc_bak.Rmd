@@ -1,0 +1,77 @@
+---
+author: "Brian Perdomo"
+output: 
+  word_document: 
+    fig_caption: yes
+    toc: yes
+params: 
+  rds: ''
+title: "Stress Test 2019 - Model `r ifelse(is.list(params$rds), params$rds$id, params$rds)`"
+date: "`r ifelse(is.list(params$rds), format(as.Date(params$rds$date, format = '%Y%m%d %H:%M%OS'), '%B %d, %Y'), '')`"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(SNVRegulatory1.5)
+
+# knitr::opts_chunk$set(
+#   fig.show = "asis", 
+#   fig.pos = 'H', 
+#   fig.height = 4,
+#   fig.align = 'center', 
+#   message = F, 
+#   warning = F, 
+#   echo = F,
+#   cache = F)
+model <- params$rds
+#model <- modelObj
+
+for (mod in c('uni', 'holdout', 'final')) {
+  if (!is.null(model[[mod]]$diagnostics$test_params)) {
+    model[[mod]]$diagnostics$test_params <- 
+      model[[mod]]$diagnostics$test_params %>% 
+      mutate_if(is.numeric, function(x) {format(round(x,digits = 3), nsmall = 3)}) %>%
+      mutate(Parameter = gsub(x= Parameter, pattern = '_', replacement = '\\_', fixed = T)) %>%
+      apply(X = ., MARGIN = 1,
+            FUN = function(x) { paste0('\\multicolumn{1}{c}{', x, '} ', collapse = '& ')}) %>% 
+      paste0(collapse = '\\\\ ')
+  }
+}
+
+model$final$diagnostics$param_change <- model$final$diagnostics$param_change %>% 
+  gather(., key = 'Parameter', value = 'Value', -Model) %>% 
+  spread(., key = 'Model', value = 'Value') %>% 
+  select(Parameter, Holdout = 'Short Model', Final = 'Full Model', 'Change (%)' = 'Change PCT') %>% 
+  mutate_if(is.numeric, function(x) { format(round(x, digits = 3), nsmall = 3)}) %>% 
+  mutate(Parameter = gsub(x= Parameter, pattern = '_', replacement = '\\_', fixed = T)) %>%
+  apply(X = ., MARGIN = 1, FUN = function(x) { paste0('\\multicolumn{1}{c}{', x, '} ', collapse = '& ')}) %>% 
+  paste0(collapse = '\\\\ ')
+
+showDvEvalDiff_1 = !any(is.null(model$dv$diagnostics$diff_1$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_1$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_1$plot_acf_text))
+
+showDvEvalDiff_2 = !any(is.null(model$dv$diagnostics$diff_2$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_2$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_2$plot_acf_text))
+```
+
+
+#Executive Summary
+
+`r model$dv$desc` was aggregated quarterly at the portfolio level. A predictive model was developed integrating CHIMPS macroeconomic variables as predictors. Model characteristics and performance diagnostics were reviewed, and forecasts were made for each of the Federal Reserve provided scenarios.
+
+#Model Name: `r model$dv$desc`
+
+|Name|Value|
+|:----|:----------|
+|Model Identifier:| `r model$id`|
+|Model Use:|Stress Testing (regulatory), Capital Planning|
+|Model Owner:|Finance|
+|Owner POC:|Kevin Brown (kevinbrown@synovus.com)|
+|Category:|Corporate Finance|
+|Model Type:|Portfolio Level (Quarterly)|
+|Purpose:|The purpose of this project is to forecast quarterly values for `r model$dv$desc` for each DFAST economic scenario.|
+|Development Date:|`r format(as.Date(model$date, format = '%Y%m%d %H:%M%OS'), '%m/%d/%Y')`
+
+# Purpose and Relevance

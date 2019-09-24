@@ -1,0 +1,608 @@
+---
+author: "Brian Perdomo"
+output: 
+  word_document: 
+    reference_doc: R:\regulatory\Stress Testing 2019\MRM\Model Documents\template\draft-styles.docx
+    fig_caption: yes
+    toc: yes
+params: 
+  rds: ''
+  outpath: ''
+title: "Stress Test 2019 - Model `r ifelse(is.list(params$rds), params$rds$id, params$rds)`"
+date: "`r ifelse(is.list(params$rds), format(as.Date(params$rds$date, format = '%Y%m%d %H:%M%OS'), '%B %d, %Y'), '')`"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(SNVRegulatory1.5)
+library(gridExtra)
+library(knitr)
+library(flextable)
+library(captioner)
+library(utils)
+
+options(scipen = 999, stringsAsFactors = F)
+
+opts_chunk$set(
+  fig.show = "asis",
+  fig.pos = 'H',
+  fig.height = 4,
+  fig.align = 'center',
+  message = F,
+  warning = F,
+  echo = F,
+  cache = F)
+
+model <- params$rds
+#model <- rds
+
+
+showDvEvalDiff_1 = !any(is.null(model$dv$diagnostics$diff_1$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_1$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_1$plot_acf_text))
+
+showDvEvalDiff_2 = !any(is.null(model$dv$diagnostics$diff_2$plot_uni_text),
+                       is.null(model$dv$diagnostics$diff_2$test_adf_text),
+                       is.null(model$dv$diagnostics$diff_2$plot_acf_text))
+
+fig_nums <- captioner()#style = 'i', style_prefix = T)
+tbl_nums <- captioner(prefix = 'Table')#, before = T)#, style = 'i', style_prefix = T)
+captions <- list()
+
+useFuns <- packageVersion('dplyr') < '0.8.0'
+```
+
+
+# Executive Summary
+
+`r model$dv$desc` was aggregated quarterly at the portfolio level. A predictive model was developed integrating CHIMPS macroeconomic variables as predictors. Model characteristics and performance diagnostics were reviewed, and forecasts were made for each of the Federal Reserve provided scenarios.
+
+# Model Name: `r model$dv$desc`
+
+|||
+|:----------------|:----------|
+|Model Id:| `r model$id`|
+|Model Use:|Stress Testing (regulatory), Capital Planning|
+|Model Owner:|Finance|
+|Owner POC:|Kevin Brown (kevinbrown@synovus.com)|
+|Category:|Corporate Finance|
+|Model Type:|Portfolio Level (Quarterly)|
+|Purpose:|The purpose of this project is to forecast quarterly values for `r model$dv$desc` for each CHIMPS economic scenario.|
+|Development Date:|`r format(as.Date(model$date, format = '%Y%m%d %H:%M%OS'), '%m/%d/%Y')`
+
+## Purpose and Relevance
+*Purpose (CS1.1), Deployment intention (CS1.2), Internal data relevance (CS2.1)*
+
+This model was developed with the purpose of forecasting `r model$dv$desc` for this segment for each of the three macroeconomic scenarios. Model forecasts are intended to assist Strategic Finance in anticipating changes in losses resulting from economic fluctuations in support of Stress Testing and Capital Planning efforts.
+
+## Modeling Approach
+### Design, Theory, and Methods
+*Design and theory(CS1.3), Methodology (CS1.4)*
+
+Series data was available in quarterly periods at the portfolio level, resulting in a time-series approach to model development. All domestic macroeconomic variables provided in the `r substr(model$date, 1, 4)` CHIMPS scenario set were considered for inclusion in the development of this model.
+
+## Model Development Process
+Model Development Group (MDG) followed internal standards of time-series modeling in the development of this model. Series and macroeconomic data were evaluated as time-series with lags and differencing used in model structures. Special emphasis was placed upon model stationarity and time-based structure in model residuals during all points of evaluation. Final models were evaluated for retention while considering model diagnostics, in-time and out-of-time forecast performance, and quality of scenario forecasts.
+
+### Out-of-Time/Out-of-Sample Testing (Holdout Procedures)
+*Out-of-sample testing (CS3.2), Out-of-time testing (CS3.3), (CS3.7), Backtesting used as form of outcomes analysis (OA2.Q2), Documentation of backtesting (OA2.2), Backtesting encompasses intended use (OA2.3), Backtesting conducted over varying periods and conditions (OA2.4), Development of confidence intervals around model forecasts (OA2.5), Backtesting results interpreted (OA2.6), Accounting for results following outside acceptable thresholds (OA2.7)*
+
+In order to evaluate all developed models with regards to in-time and out-of-time forecast accuracy, a group of holdout data was withheld from the data used to train the model. The last four observations were withheld constituting the holdout data. The model was trained on all available observations up until the holdout period. The model was then used to generate in-time forecasts for all observations in the initial training set and out-of-time forecasts for all periods in the holdout data set. Each model was developed using this approach to allow the comparison of in-time and out-of-time forecast performance across candidate models.
+
+### Scenario Forecasting
+CHIMPS modeling requires that three scenarios be used to generate separate forecasts for each developed model. Each economic scenario includes quarterly macroeconomic variable values to be used in forecast generation. Each scenario begins using forecasted macroeconomic values as of 2019 Q1 which continue through 2021 Q4 resulting in a 12 quarter forecast window.
+
+<!-- `r gsub(x = model$final$data$base$df$strDate[max(seq(1, nrow(model$final$data$base$df))[!is.na(model$final$data$base$df[model_get_dv_name(model$final$model)])] + 1)], pattern = '.', replacement = ' Q', fixed = T)` which continue through `r gsub(x=max(model$final$data$base$df$strDate), pattern = '.', replacement = ' Q', fixed = T)` resulting in a 12 quarter forecast window. -->
+
+A `base` scenario is provided that represents continued gradual economic recovery.
+
+An `adverse` scenario is provided that represents mild economic slowing.
+
+A `severely adverse` scenario is provided that represents the rapid onset of a severely recessed economic environment.
+
+# Dependent Value Processing
+*Internal data quality(CS2.2),  Assessment  of  internal  data  (OM2.1),  Assessment  of  internal  data  and  information  quality (OM2.2)*
+
+All values represent series rates for quarters from `r gsub('\\.', ' Q', min(model$dv$data$df$strDate))` through `r gsub('\\.', ' Q', max(model$dv$data$df$strDate))` for a total of `r nrow(model$dv$data$df)` observations.
+
+The data was delivered to MDG via flat file. The DV data was then formatted and made ready to join with CHIMPS macroeconomic variables.
+
+## Assumptions
+*Qualitative  assumptions  (OM5.3),  List  of  assumptions  (OM5.Q2),  Evidence  supporting  assumptions (OM5.4)*
+
+There were no model-specific qualitative assumptions.
+
+### Testing, Use, and Considerations
+*Testing encompasses model intended use (OM6.8), Consideration of model issues (OM6.9)*
+
+The testing was performed on the product segments that are defined within the scope of the model group. 
+
+### Impact on Other Models
+*Impact on other (endogenous) models relying on results (OM6.10)*
+
+The portfolio level models do not impact any other model group.The relationship is quantitative for adverse scenarios and more qualitative for the Base scenario since the Base scenario incorporates projection methods consistent with budgeting and capital planning processes rather than a single model or calculation.  
+
+<!-- The portfolio level models impact the DFAST Balance Sheet model group.The relationship is quantitative for adverse scenarios and more qualitative for the Base scenario since the Base scenario incorporates projection methods consistent with budgeting and capital planning processes rather than a single model or calculation.    -->
+
+<!-- %The output of this model is used to determine a component of the Allowance for Loan and Lesase Losses that impacts its balance. -->
+
+<!-- This model has no dependent model dependency risk as no quantitative or qualitative models depend on the output of this model. It should, however, be noted that the output of this and affiliated portfolio-level balance models are used in generating estimates of deposits and losses for the purpose of higher-level asset management. -->
+
+<!-- %The output from the Balance Sheet models is used to convert loss rates estimated in the credit loss forecasting models to dollar terms. The projected loan balances are used as inputs in other models including other credit losses and non-performing assets. The model output for other credit losses and non-performing assets are percentages of total loans, so calculations for these items are completed after loan balances are derived. -->
+
+### Supervisory Concerns/Guidance
+*Supervisory concerns/guidance (CS1.8)*
+
+There are no supervisory concerns or guidance specifically related to this model.
+
+### Data Adjustments
+*Internal data adjustments, recoding, outlier removal, etc. (CS2.3), Internal data proxies (CS2.4)*
+
+> `r model$dv$data_adjust_text`
+
+## Series Structure and Stationarity
+> `r model$dv$diagnostics$diff_0$plot_uni_text`
+
+```{r }
+captions$uni_d0_plot <- fig_nums('uni_d0_plot', 'Univariate DV Evaluation')
+```
+
+uni_d0_plot
+`r captions$uni_d0_plot`
+
+> `r model$dv$diagnostics$diff_0$test_adf_text`
+
+`r tbl_nums('uni_d0_adf', 'Univariate DV Evaluation - Augmented Dickey-Fuller Test')`
+```{r}
+if (useFuns) {
+  model$dv$diagnostics$diff_0$test_adf %>% 
+    mutate_at(vars(Tau, p), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$dv$diagnostics$diff_0$test_adf %>% 
+    mutate_at(vars(Tau, p), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$dv$diagnostics$diff_0$plot_acf_text`
+
+```{r }
+captions$uni_d0_acf <- fig_nums('uni_d0_acf', 'Univariate DV Evaluation - ACF and PACF')
+```
+
+uni_d0_acf
+`r captions$uni_d0_acf`
+
+> `r model$dv$diagnostics$diff_1$plot_uni_text`
+
+```{r }
+captions$uni_d1_plot <- fig_nums('uni_d1_plot', 'Univariate DV Evaluation - Order of Difference = 1')
+```
+
+uni_d1_plot
+`r captions$uni_d1_plot`
+
+> `r model$dv$diagnostics$diff_1$test_adf_text`
+
+`r tbl_nums('uni_d1_adf', 'Univariate DV Evaluation - Order of Difference = 1 - Augmented Dickey-Fuller Test')`
+```{r}
+
+if (useFuns) {
+  model$dv$diagnostics$diff_1$test_adf %>% 
+    mutate_at(vars(Tau, p), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$dv$diagnostics$diff_1$test_adf %>% 
+    mutate_at(vars(Tau, p), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$dv$diagnostics$diff_1$plot_acf_text`
+
+```{r }
+captions$uni_d1_acf <- fig_nums('uni_d1_acf', 'Univariate DV Evaluation - Order of Difference = 1 - ACF and PACF')
+```
+
+uni_d1_acf
+`r captions$uni_d1_acf`
+
+
+# Covariate Data Processing
+## Scenario Data
+The scenario data was loaded into the modeling environment using the MDG 
+developed automated function and joined to the dependent variable. All independent variables were included already-differenced as reflected in the documentation  `CHIMPS Documentation`.
+
+
+# Modeling With Covariates
+
+## Feature Selection & Shrinkage
+A feature selection process using LASSO was used to select the relevant covariates. The pool of all possible covariates include: (1) All possible CHIMPS covariates considered to be intuitive to end users; (2) lags 1-4 of each variable specified in (1); and (3) lags 1-4 of the dependent variable. The LASSO estimation is implemented using the glmnet package in R. The full procedure is identical to that specified in the `AR-X section` of the `CHIMPS Documentation`, though with alpha required to be equal to 1.
+
+The final covariates found by the model are the following:
+`r paste0('* ', names(model$dv$diagnostics$plot_ccf), '', collapse = '\n')`
+
+```{r}
+captions$CCFPlots <- fig_nums('CCFPlots', 'CCF Plots')
+# marrangeGrob(model$dv$diagnostics$plot_ccf, nrow = 4, ncol = 2, top = NULL)
+```
+CCFPlots
+
+
+
+`r paste0('* ', model$final$diagnostics$strengths_text, '', collapse = '\n')`
+
+
+
+
+> `r model$holdout$sum_text`
+
+## Model Evaluation
+> `r model$holdout$diagnostics$test_param_text`
+
+`r tbl_nums('hout_test_params', 'Holdout Multivariate ARIMA - Parameter Significance')`
+```{r}
+if (useFuns) {
+  model$holdout$diagnostics$test_params %>% 
+    mutate_at(vars(-Parameter, -Estimate), 
+              funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$holdout$diagnostics$test_params %>% 
+    mutate_at(vars(-Parameter, -Estimate), 
+              list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$holdout$diagnostics$test_adf_text`
+
+`r tbl_nums('hout_test_adf', 'Holdout Multivariate ARIMA - Augmented Dickey-Fuller Test')`
+```{r}
+if (useFuns) {
+  model$holdout$diagnostics$test_adf %>% 
+    mutate_at(vars(Tau, p), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$holdout$diagnostics$test_adf %>% 
+    mutate_at(vars(Tau, p), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$holdout$diagnostics$plot_acf_text`
+
+```{r }
+captions$multiARIMAACFPlots <- fig_nums('multiARIMAACFPlots', 'ARIMA - Holdout - ACF and PACF Plots')
+```
+
+multiARIMAACFPlots
+`r captions$multiARIMAACFPlots`
+
+> `r model$holdout$diagnostics$plot_normal_text`
+
+```{r }
+captions$multiARIMANormality <- fig_nums('multiARIMANormality', 'ARIMA - Holdout - Normality of Residuals')
+```
+
+multiARIMANormality
+`r captions$multiARIMANormality`
+
+<!-- ```{r multiARIMANormality, fig.cap='ARIMA - Holdout - Normality of Residuals'} -->
+<!-- marrangeGrob(model$holdout$diagnostics$plot_normal, nrow=1, ncol=2, top = NULL) -->
+<!-- ``` -->
+
+> `r model$holdout$diagnostics$test_box_text`
+
+`r tbl_nums('hout_test_bl', 'Holdout Multivariate ARIMA - Box-Ljung Test')`
+```{r}
+if (useFuns) {
+  model$holdout$diagnostics$test_box_ljung %>% 
+    mutate_at(vars(-Lag), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$holdout$diagnostics$test_box_ljung %>% 
+    mutate_at(vars(-Lag), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$holdout$diagnostics$sum_text`
+
+### In-Time and Out-of-Time Forecast Evaluation
+The model with covariates was evaluated for in-time and out-of-time forecast performance using both visual inspection and calculated performance metrics. Performance metrics for in-time and out-of-time forecast accuracy are displayed below, though offer little interpretable insight in the absence of model comparison.
+
+`r tbl_nums('hout_test_acc', 'Holdout Multivariate ARIMA - Forecast Accuracy')`
+```{r}
+if (useFuns) {
+  model$holdout$diagnostics$test_accuracy %>% 
+    mutate_at(vars(-Model, -Type), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$holdout$diagnostics$test_accuracy %>% 
+    mutate_at(vars(-Model, -Type), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$holdout$diagnostics$plot_intime_text`
+
+```{r }
+captions$multiARIMAInTimePlot <- fig_nums('multiARIMAInTimePlot', 'ARIMA - Holdout - In-Time Forecasts')
+```
+
+multiARIMAInTimePlot
+`r captions$multiARIMAInTimePlot`
+
+> `r model$holdout$diagnostics$plot_holdout_text`
+
+```{r }
+captions$multiARIMAHoldoutPlot <- fig_nums('multiARIMAHoldoutPlot', 'ARIMA - Holdout - Out-of-Time Forecasts')
+```
+
+multiARIMAHoldoutPlot
+`r captions$multiARIMAHoldoutPlot`
+
+### Holdout Scenario Forecasts
+> `r model$holdout$diagnostics$plot_scenario_text`
+
+```{r }
+captions$multiARIMAHoldoutFcasts <- fig_nums('multiARIMAHoldoutFcasts', 'ARIMA - Holdout Forecasts')
+```
+
+multiARIMAHoldoutFcasts
+`r captions$multiARIMAHoldoutFcasts`
+
+# Final Model
+`r model$final$model$text`
+
+## Re-fitting - Final ARIMA model
+*In-sample testing (CS3.1), product variety (CS3.10), Model accuracy, stability, and robustness (OM2.10), Evaluation of various model components (OM6.5)*
+
+`r model$final$diagnostics$text`
+
+### Evaluation of Model Components
+*Evaluation of various model components (CS3.6), Evidence supporting assumptions (CS4.4)*
+
+> `r model$final$diagnostics$test_param_text`
+
+`r tbl_nums('fin_test_params', 'Final Multivariate ARIMA - Parameter Significance')`
+```{r}
+if (useFuns) {
+  model$final$diagnostics$test_params %>% 
+    mutate_at(vars(-Parameter, -Estimate), 
+              funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$final$diagnostics$test_params %>% 
+    mutate_at(vars(-Parameter, -Estimate), 
+              list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$final$diagnostics$test_adf_text`
+
+`r tbl_nums('fin_test_adf', 'Final Multivariate ARIMA - Augmented Dickey-Fuller Test')`
+```{r}
+if (useFuns) {
+  model$final$diagnostics$test_adf %>% 
+    mutate_at(vars(Tau, p), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$final$diagnostics$test_adf %>% 
+    mutate_at(vars(Tau, p), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$final$diagnostics$plot_acf_text`
+
+```{r }
+captions$FinalACFPlots <- fig_nums('FinalACFPlots', 'Final ARIMA Model - ACF and PACF Plots')
+```
+
+FinalACFPlots
+`r captions$FinalACFPlots`
+
+> `r model$final$diagnostics$plot_normal_text`
+
+```{r }
+captions$FinalNormality <- fig_nums('FinalNormality', 'Final ARIMA Model - Normality of Residuals')
+```
+
+FinalNormality
+`r captions$FinalNormality`
+
+> `r model$final$diagnostics$test_box_text`
+
+`r tbl_nums('fin_test_bl', 'Final Multivariate ARIMA - Box-Ljung Test')`
+```{r}
+if (useFuns) {
+  model$final$diagnostics$test_box_ljung %>% 
+    mutate_at(vars(-Lag), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$final$diagnostics$test_box_ljung %>% 
+    mutate_at(vars(-Lag), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+> `r model$final$diagnostics$final_diag_text`
+
+### Parameter Changes
+
+> `r model$final$diagnostics$test_paramchange_text`
+
+`r tbl_nums('fin_test_params_chg', 'Parameter Changes')`
+```{r}
+if (useFuns) {
+  model$final$diagnostics$param_change %>% 
+    mutate_at(vars(-Model), funs(format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+} else {
+  model$final$diagnostics$param_change %>% 
+    mutate_at(vars(-Model), list(~format(round(., 3), nsmall = 3))) %>% 
+    flextable(.) %>% 
+    theme_booktabs(.) %>% 
+    autofit(.)
+}
+```
+
+### In-Time Forecasts
+> `r model$final$diagnostics$plot_intime_text`
+
+```{r }
+captions$FinalInTimeFcasts <- fig_nums('FinalInTimeFcasts', 'Final ARIMA Model - In-time Forecasts')
+```
+
+FinalInTimeFcasts
+`r captions$FinalInTimeFcasts`
+
+### Evaluation of Model Outcomes - Scenario Forecasts
+*Evaluation of model outcomes (CS3.12)*
+
+> `r model$final$diagnostics$plot_scenario_text`
+
+```{r }
+captions$FinalScenFcasts <- fig_nums('FinalScenFcasts', 'Final ARIMA Model - Forecasts')
+```
+
+FinalScenFcasts
+`r captions$FinalScenFcasts`
+
+## Sensitivity Testing
+*Model stability: univariate sensitivity testing  (CS3.4), (OM6.3) *
+
+In order to facilitate sensitivity testing, a series of shocks were applied to the base-scenario values of each macroeconomic CHIMPS predictor throughout the span of the forecasts. For univariate sensitivity testing, forecasts were generated replacing the base-scenario values with the shocked values one at a time when creating forecasts. For multivariate sensitivity testing, all shocked values simultaneously replaced all base-scenario values when generating the forecast.
+
+The shocked values were produced by multiplying the base scenario values by either 1.10 or 0.90 depending on the direction of the shock.
+
+The following variables use the 0.90 shock value: gdp\_real, gdp\_nom, dispinc\_real, dispinc\_nom, cpi\_inf, treas\_3month, treas\_5year, treas\_10year, mort, prime, dji, hpi, and cri.
+
+The following variables use the 1.10 shock value: unem, bbb, volatility, bbb\_cs, mort\_cs, and treas\_10y\_3m.
+
+
+### Univariate Shocks
+> `r model$final$diagnostics$plot_shock_text`
+
+```{r }
+captions$FinalShockFcasts <- fig_nums('FinalShockFcasts', 'Final ARIMA Model - Forecasts')
+```
+
+FinalShockFcasts
+`r captions$FinalShockFcasts`
+
+### Multivariate Shock
+*Multivariate sensitivity testing (CS3.5), (OM6.4) *
+
+Whereas additional univariate and multivariate sensitivity testing was conducted, it is noted that generation of scenario forecasts with this model provides evidence of model stability and appropriate sensitivity. The CHIMPS scenarios cover the full range of expected economic conditions for the forecast period, from serious recession to continued economic recovery. For each scenario, each predictor varies over time as a reflection of the complex time-base macroeconomic environment associated with that particular scenario. The retained model generated reasonable and appropriate forecasted values as judged by the Capital Management SME and analyst when simultaneously evaluating all three scenario forecasts. The reasonableness of these forecasts offers substantial evidence supporting the ability of the retained model to generate reasonable forecasts across a wide variety of economic scenarios.
+
+> `r model$final$diagnostics$plot_shock_multi_text`
+
+### Sensitivity Testing of Assumptions
+*Sensitivity testing of assumptions (CS4.4)*
+
+Not applicable for this model as no quantitative assumptions were used in model development or forecast generation.
+
+## Model Uncertainty
+*Model uncertainty, inaccuracy, or instability (CS3.11), Quantifying model uncertainty (CS6.1)*
+
+When considered collectively, the model diagnostics, out-of-time testing, and generation of forecast values over multiple ranges indicate that this is a model of acceptable accuracy with uncertainty within that deemed acceptably by SNV model management policy. In order to quantify model uncertainty, the model out-of-time mean absolute error (MAE) value will be used as an estimate of expected uncertainty for any given forecast generated using this model. The MAE is determined to be a 'most-likely' error estimator and, when applied universally to every forecasted value to decrease forecasted index values, a method that will remain conservative while not generating unreasonable inflation of error estimates.
+
+The MAE defined uncertainty for this model was observed at **`r format(round(model$holdout$diagnostics$test_accuracy$MAE[2],3), big.mark=',', nsmall = 3)`**.
+
+## Benchmark Comparison
+*Benchmarking (OM1.4), Benchmark model used, quality of benchmark model (CS5.1), Discussion of differences from benchmark (CS5.Q2), Range of differences (CS5.2), Is the benchmark used (OM4.Q1), Quality of benchmark (OM4.1), Benchmark differs but not in error (OM4.Q2), Differences within appropriate range (OM4.2)*
+
+There was no comparison of the forecasts generated by the retained model against a less granular benchmark model developed for the same portfolio. This model was developed at the least granular level possible, and as such forecasts from this scenario represent the smallest level of portfolio values appropriate to collectively model.
+
+## Strengths and Limitations
+*Model merits (CS1.6), Model limitations (CS1.7), (OM6.6), Assessment of potential limitations (CS3.8), Model robustness (CS3.9), (OM6.7)*
+
+### Model Strengths
+`r paste0('* ', model$final$diagnostics$strengths_text, '', collapse = '\n')`
+
+### Model Limitations
+`r paste0('* ', model$final$diagnostics$limitations_text, collapse = '\n')`
+
+## Long Forecast Horizon
+*Long forecast horizon (OA2.Q3), Backtesting of long forecast horizon (OA2.9), Early warning metrics (OA2.10)*
+
+The 12 quarter forecast horizon generated is a standard forecast horizon for Stress Testing. The forecast horizon does not extend beyond five years, which has been determined by SNV Treasury to be a long forecast horizon. All model forecasts will be re-generated at a not-less-than annual schedule. Re-development of this model will be conducted on a schedule as outlined in SNV model management policy. At each instance of consideration for redevelopment, backtesting will be conducted.
+
+## Supervisory Concerns/Guidance
+*Supervisory concerns/guidance (CS1.8)*
+
+There are no specific regulatory concerns or guidance related to the use of this model.
+
+#### Overrides and Ongoing Monitoring Practices
+There are no explicit overrides associated with this model. Ongoing monitoring practices can be found in SNV Model Management policy documentation.
+
+## Model Uncertainty
+*Accounting for model uncertainty: adjustments, restrictions, etc. (CS6.3), Ongoing Monitoring Plan/Policy (OM1.1), Management of model overrides (OM1.3), Benchmarking (OM1.4), Qualitative adjustments and model assumptions (OM1.5), OM tests (OM1.6), Use of overrides (OM3.Q1), Overrides due to model limitations (OM3.Q2), Reasons for overrides (OM3.1), Tracking of override performance (OM3.2), Is rate of overrides high or is override process improvement to model performance (OM3.Q3), Efforts in model redevelopment relevant to override use (OM3.3), Qualitative judgments applied (OM5.Q1), Review of qualitative adjustments (OM5.1), Qualitative adjustments sensitivity testing (OM5.2), Sensitivity testing of assumptions (OM5.5)*
+
+Model uncertainty is quantified by using the final model MAE value calculated for the holdout forecast period. All other items already addressed earlier in this document.
+
+## Model Reporting
+*Model reporting (OM1.2)*
+
+The modeling process and technical documentation for this model, contained in this document, provides an exhaustive description of each process, content, data, and diagnostic model related materials and results. All non-technical documentation and application of this model currently and will continue to refer to the most recent technical documentation.
+
+## Model Use and Documentation Availability
+*Model reports used for business decision making (OM2.Q3), Model reports clear (OM2.9), Availability of reports regarding model accuracy, stability, and robustness (OM2.10), Availability of reports regarding key assumptions (OM2.11)*
+
+The model will be used in Stress Testing and for regulatory purposes and as a source of information in Capital Planning procedures. All documentation, code, and output are made readily available to the MDG, Treasury, MRMG, model owner, and any other concerned parties within the parent organization.
+
+## Qualitative Adjustments
+There were no qualitative adjustments made to model forecasts.
+
+# Appendix
+The following command lists the version of R and packages used to build this document.
+```{r sessionInfo}
+sessionInfo()
+```
+
+```{r}
+write_rds(captions, str_replace(params$outpath, '.docx', '.rds'))
+```

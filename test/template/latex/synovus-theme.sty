@@ -1,0 +1,30 @@
+\ifbool{@final}{
+}{
+	\usepackage{draftwatermark}
+	\SetWatermarkText{DRAFT}
+	\SetWatermarkScale{5}
+}
+\fancypagestyle{SNV}{%
+
+	\fancyhead[R]{\includegraphics[height=11pt]{../img/syn-logo}}
+	\fancyhead[L]{\rightmark} 
+	\fancyfoot[C] {\purposeFooter{}}  
+	\fancyfoot[L] {\jobname}
+	\fancyfoot[R] {Internal Use Only $\vert $\hspace{2 px}\thepage}
+
+}
+\pagestyle{SNV}
+\ifbool{@index}{
+
+\usepackage[english]{babel}
+\makeindex
+\addto\captionsenglish{%
+  \renewcommand*{\indexname}{\nameOfIndex}
+}
+\patchcmd{\theindex}% <cmd>
+  {\thispagestyle{plain}}% <search>
+  {\pagestyle{SNV}}% <replace>
+  {}{}% <success><failure>
+}{}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}%
+

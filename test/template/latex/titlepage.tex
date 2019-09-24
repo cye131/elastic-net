@@ -1,0 +1,50 @@
+\begin{titlepage}
+\begin{center}
+
+% Title-test
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+\HRule \\[0.4cm]
+ 
+%%%%%%%%%%%%%%        TITLE          %%%%%%%%%%%%%%%%%%%%%
+{\LARGE \bfseries \theTitle \\[0.4cm] }
+%%%%%%%%%%%%%%%%%%                   %%%%%%%%%%%%%%%%%%%
+\HRule \\[.25in]
+% Author 
+\large Model Developers:\normalsize \vspace*{-7pt}
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{R |X}
+\authorList
+[5pt] \multicolumn{2}{c}{ \large Group Supervisor: \normalsize}\\ 
+Kevin Brown & \href{mailto:kevinbrown@synovus.com}{\small\emph{kevinbrown@synovus.com}}\normalsize
+\end{tabularx}
+\end{table}
+\vspace*{-7pt}
+\processDate \\  
+
+\end{center}
+
+\vspace{3.8in}
+\executiveSummary
+
+% Synovus logo
+\begin{figure}[b]
+\centering
+\includegraphics[height=.375in]{./latex/img/syn-logo}
+ \end{figure}
+
+\end{titlepage}
+
+\pagestyle{fancy}
+\setcounter{page}{2}
+\ifbool{@toc}{\tableofcontents}{}
+\ifbool{@figures}{\listoffigures}{}
+\ifbool{@tables}{\listoftables}{}
+\ifbool{@index}{
+\cleardoublepage
+\printindex
+}{\cleardoublepage}
+
+\renewcommand{\arraystretch}{1.75}
+\setlength{\parskip}{\baselineskip}
+\setlength{\parindent}{0pt}
